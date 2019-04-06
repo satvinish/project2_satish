@@ -1,159 +1,211 @@
 ## Import data 
 ## by setting Working directory
 setwd("C:/Users/satish/Desktop")
-Churndata <- read.csv("Churn.csv", na.strings = c(""," ","NA"))   
+Churn<- read.csv("Churn.csv", na.strings = c(""," ","NA"))   
 
 ## Check for duplicates
-Churndata<-Churndata[!duplicated(Churndata),]
+Churn<-Churn[!duplicated(Churn),]
+any(is.na(Churn)) 
 
+#library
+library(plyr) 
+library(corrplot) 
+library(ggplot2) 
+library(gridExtra) 
+library(ggthemes) 
+library(caret) 
+library(MASS) 
+library(randomForest) 
+library(party) 
+library(ggplot2) 
+library(reshape2) 
+library(corrplot) 
+library(e1071) 
+library(caret) 
+library(rpart) 
+library(C50) 
+library(party) 
+
+#library(partykit) 
+library(randomForest) 
+library(ROCR) 
+library(dplyr) 
+library(car) 
 ############################## Missing Values #########################
 ## Visualize Na terms
 library(Amelia)
-missmap(Churndata)
-sapply(Churndata,function(x) sum(is.na(x)))
+missmap(Churn,col=c("yellow","red")) 
+mydata2<-Churn[,-21]
+mydata<-mydata2[,19] 
+sapply(mydata, function(x) sum(is.na(x))) 
+mydata <- mydata[complete.cases(mydata), ] 
+intrain<- createDataPartition(mydata$Churn,p=0.8,list=FALSE) 
+set.seed(2017) 
+training<- mydata[intrain,] 
+testing<- mydata[-intrain,] 
+dim(training); dim(testing) 
+library (data.table) 
+library (plyr) 
+library (stringr) 
+LogModel <- glm(Churn ~ .,family=binomial(link="logit"),data=training) 
+print(summary(LogModel)) 
+anova(LogModel, test="Chisq") 
+testing$Churn <- as.character(testing$Churn) 
+testing$Churn[testing$Churn=="No"] <- "0" 
+testing$Churn[testing$Churn=="Yes"] <- "1" 
+fitted.results <- predict(LogModel,newdata=testing,type='response') 
+fitted.results 
+misClasificError <- mean(fitted.results != testing$Churn) 
+print(paste('Logistic Regression Accuracy',1-misClasificError)) 
 
-#### Delete Obervations with NA values
-compTrain <- na.omit(Churndata)
+# calculating the accuracy rate 
+accuracyRate <-1-misClasificError 
+print(accuracyRate) 
+print("Confusion Matrix for Logistic Regression"); table(testing$Churn, fitted.results > 0.5) 
+exp(cbind(OR=coef(LogModel), confint(LogModel))) 
+head(mydata) 
+summary(mydata) 
+View(mydata) 
+sapply(mydata, sd) 
+cormatrix <- round(cor(mydata), digits = 2 ) 
+cormatrix 
+plot.new() 
+plot(mydata$Churn ~mydata$`Day Mins`) 
+title('Basic Scatterplot') 
+ggplot(mydata, aes(x=mydata$`Day Mins`)) + geom_histogram(binwidth = 1, fill = "white", color = "purple") 
 
-#### Impute mean/median/mode 
-library(ggplot2)
+#Randomly split data into train and test set 
+#80% will be ssigned to train set, 20% will be assigned to tst set 
+barplot(table(mydata$Churn), col= c("green", "red"), main='bar plot of Churn') 
+text(barplot(table(mydata$Churn), col =c('green' , 'red'), main='bar plot of Churn'), 0,table(mydata$Churn), cex =2 , pos =3) 
 
-#### churn
-ggplot(Churndata, aes(1, Churn)) + geom_boxplot()
-hist(Churndata$Churn)
+#proportion 
+round(prop.table(table(mydata$Churn))*100,digits = 2) 
+names(mydata) 
+normalize<-function(x){return((x-min(x))/(max(x)-min(x)))} 
+mydata_n<-as.data.frame(lapply(mydata[1:18],normalize)) 
+str(mydata) 
+str(mydata_n) 
+mydata_train<-mydata_n[1:2666,] 
+mydata_test<-mydata_n[2667:3333,] 
+mydata_train_labels<-mydata_n[1:2666,7] 
+mydata_test_labels<-mydata_n[2667:3333,7] 
+str(mydata_train) 
+str(mydata_train_labels) 
+str(mydata_test) 
+str(mydata_test_labels) 
+library(class) 
 
-# Impute by Median
-Churndata$Churn[is.na(Churndata$Churn)]<-
-  median(Churndata$Churn, na.rm = T)
+#Apply knn 
+mydata_test_pred<-knn(train = mydata_train,test = mydata_test, cl=mydata_train_labels,k=53) 
+summary(mydata_test_pred) 
 
-## Impute using package imputeMissings
-library(imputeMissings)
-l<-impute(Churndata, method = "median/mode")
+#Evalulalte model 
+library(gmodels) 
+CrossTable(x=mydata_test_labels, y=mydata_test_pred,prop.chisq = FALSE) 
+sapply(mydata_n, sd) 
+cormatrix <- round(cor(mydata_n), digits = 2 ) 
+cormatrix 
+plot.new() 
+plot(mydata_n$Churn ~mydata_n$Day.Mins) 
+title('Basic Scatterplot') 
+ggplot(mydata_n, aes(x=mydata_n$Day.Mins)) + geom_histogram(binwidth = 1, fill = "yellow", color = "black") 
+ggplot(mydata_n, aes(x=mydata_n$CustServ.Calls)) + geom_histogram(binwidth = 1, fill = "green", color = "red") 
+names(mydata_n) 
 
-## Mice Package
-library(mice)
-d<-Churndata[,c(1:21)]
-imputed_Data <- mice(d, m=5, maxit = 50, method = 'pmm', seed = 3000)
+#Forward elimination 
+#Lower AIC indicates a better model 
 
-############################# Outliers Treatment ###################
-## churn Variable
-library(ggplot2)
-ggplot(l, aes(1,Churn)) + geom_boxplot(outlier.colour = "red",
-                                            outlier.shape = 2)
-## Labeling Outliers 
-is_outlier <- function(x) {
-  return(x < quantile(x, 0.25) - 1.5 * IQR(x) | x > quantile(x, 0.75) + 1.5 * IQR(x))
-}
+forward <- step(glm(Churn ~ 1, data = mydata_train), direction = 'forward', scope = ~Account.Length+VMail.Message+Day.Mins + Eve.Mins + 
+                  Night.Mins + Intl.Mins + CustServ.Calls + Int.l.Plan + VMail.Plan +
+                  Day.Calls + Day.Charge + Eve.Calls + Eve.Charge + Night.Calls + 
+                  Night.Charge + Intl.Calls + Intl.Charge) 
 
-library(dplyr)
-l %>%
-  mutate(outlier = ifelse(is_outlier(Churn), Churn, as.numeric(NA))) %>%
-  ggplot(.,aes(1,Churn)) + geom_boxplot(fill = "steelblue",outlier.colour = "red",
-                                             outlier.shape = 2)+
-  geom_text(aes(label = outlier), na.rm = TRUE, hjust = -0.3)
+logit<- glm(Churn ~Account.Length+Day.Mins+ Day.Charge +CustServ.Calls+VMail.Plan +Eve.Mins+ Eve.Charge+VMail.Message+Day.Calls +Eve.Calls+ Intl.Mins + Night.Calls+Intl.Calls, data = mydata_train, family = "binomial") 
+summary(logit) 
 
-## Churn
-boxplot(l$Churn)
-ggplot(l, aes(1,Churn)) + geom_boxplot(outlier.colour = "red",outlier.shape = 2)
-qnt <- quantile(l$Churn, 0.75, na.rm = T)
-caps <- quantile(l$Churn, 0.95, na.rm = T)
-H <- 1.5 * IQR(l$Churn, na.rm = T)
-l$Churn[l$Churn > (qnt +  H)] <- caps
+#evaluate model's fit and performance 
+influenceIndexPlot(logit, vars = c('Cook', "hat"), id.n =4)
 
-#### Bivariate Analysis
-## Continuous Variable
-contVars<-c("Account.Length","VMail.Message","Day.Mins","Eve.Mins","Night.Mins","Intl.Mins","CustServ.Calls","Int'l.Plan","VMail.Plan",
-"Day.Calls","Day.Charge","Eve.Calls","Eve.Charge","Night.Calls")
-cont_df<-l[,names(l) %in% contVars]
+# Confidence interval using log-likelihood 
+confint(logit) 
+exp(logit$coefficients) 
 
-## Scatter plot
-pairs(cont_df)
-library(corrplot)
-corrplot(cor(cont_df), type = "full", "ellipse")
+# logistic regression model: 
 
-# 
-ggplot(l, aes(Account.Length, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(VMail.Message, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Day.Mins, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Eve.Mins, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Night.Mins, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Intl.Mins, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(CustServ.Calls, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Intl.Plan, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(VMail.Plan, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Day.Calls, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Day.Charge, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Eve.Calls, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Eve.Charge, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Night.Calls, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Night.Charge, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Intl.Calls, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Intl.Charge, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(State, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Area.Code, Churn)) + geom_boxplot(fill = "steelblue")
-ggplot(l, aes(Phone, Churn)) + geom_boxplot(fill = "steelblue")
+fit <- glm(Churn~.,data =mydata_train ,family = binomial(link='logit')) 
+summary(fit) 
+library(MASS) 
+step_fit <- stepAIC(fit,method='backward') 
+summary(step_fit) 
+confint(step_fit) 
 
-### Data Modelling
+#ANOVA on base model 
+anova(fit,test = 'Chisq') 
 
-# creating train and test data
-str(Churndata)
-train_Churn <- Churndata[1:2666,] # creating train data
-test_Churn <- Churndata[2667:3333,]# creating test data
+#ANOVA from reduced model after applying the Step 
+anova(step_fit,test = 'Chisq') 
 
-#create vector
-vector<- seq(0,1,0.1)
-vector
+#plot the fitted model 
+plot(fit$fitted.values) 
+pred_link <- predict(fit,newdata = mydata_test,type = 'link') 
 
-## Logistic Regression
-str(train_Churn)
-logistic<-glm(Churn~., family = "binomial", data = train_Churn)
-summary(logistic)
+#check for multicollinearity 
+library(car) 
+vif(fit) 
+vif(step_fit) 
+pred <- predict(fit,newdata = mydata_test,type ='response') 
 
-# making predictions
-library(caret)
-churn.probs<- predict(logistic, type = "response")
-prediction <- predict(logistic,newdata=train_Churn,type='response')
-for(i in seq(0.1, 0.9, 0.1))
-{
-  churn.probs<- ifelse(prediction<=i, 0, 1) 
-  confusionMatrix <- confusionMatrix(churn.probs,train_Churn$Churn)
-}
+#check the AUC curve 
+library(pROC) 
+g <- roc( Churn~ pred, data = mydata_test) 
+g 
+plot(g) 
+library(caret) 
 
+#with default prob cut 0.50 
+mydata_test$pred_Churn <- ifelse(pred<0.8,'yes','no') 
+table(mydata_test$pred_Churn,mydata_test$Churn) 
 
-# Looking at the response encoding
-Churn<- as.factor(Churndata$Churn)
-contrasts(df$Churn)
+#training split of churn classes 
+round(table(mydata_train$Churn)/nrow(mydata_train),2)*100 
 
+# test split of churn classes 
+ound(table(mydata_test$Churn)/nrow(mydata_test),2)*100 
 
-# converting probabilities to "Yes" and "No" 
-glm.pred = rep("No", length(churn.probs))
-glm.pred[churn.probs > 0.5] = "Yes"
-glm.pred <- as.factor(glm.pred)
+#predicted split of churn classes 
+round(table(mydata_test$pred_Churn)/nrow(mydata_test),2)*100 
 
-# creating a confusion matrix
-confusionMatrix(glm.pred, test_Churn$Churn, positive = "Yes")
+#create confusion matrix 
+#confusionMatrix(mydata_test$Churn,mydata_test$pred_Churn) 
+#how do we create a cross validation scheme 
 
-#ROC curve 
-library(ROCR)
-# need to create prediction object from ROCR
-pr <- prediction(churn.probs, test_Churn$Churn)
+control <- trainControl(method = 'repeatedcv', 
+                        number = 10,
+                        repeats = 3) 
 
-# plotting ROC curve
-prf <- performance(pr, measure = "tpr", x.measure = "fpr")
-plot(prf)
+seed <-7 
+metric <- 'Accuracy' 
+set.seed(seed) 
+fit_default <- train(Churn~., 
+                     data = mydata_train,
+                     method = 'glm', 
+                     metric = NaN, 
+                     trControl = control) 
+print(fit_default) 
+library(caret) 
+varImp(step_fit) 
+varImp(fit_default) 
+library(devtools) 
+library(woe) 
+library(riv) 
+iv_df <- iv.mult(mydata_train, y="Churn", summary=TRUE, verbose=TRUE) 
+iv_df 
+iv <- iv.mult(mydata_train, y="Churn", summary=FALSE, verbose=TRUE) 
 
-# AUC value
-auc <- performance(pr, measure = "auc")
-auc <- auc@y.values[[1]]
-auc
+# Plot information value summary 
+iv.plot.summary(iv_df) 
 
-
-# accuarcy check
-confusionMatrix <- confusionMatrix(prediction,train_Churn$Churn)
-
-# summarize results
-confusionMatrix<- confusionMatrix(predictions,test$Loan_Status)
-confusionMatrix
-
-library("Rserve")
+#Visualization thry Tableau
+library(Rserve) 
 Rserve()
